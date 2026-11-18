@@ -1,0 +1,5 @@
+-r requirements.txt
+redis>=5
+fakeredis>=2.23
+pytest>=8
+onnx>=1.16

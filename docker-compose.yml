@@ -1,0 +1,36 @@
+# Triển khai đầy đủ (Giai đoạn 5): PostgreSQL + TimescaleDB, Redis Streams, ExamGuard, (tùy chọn) FaceReg.
+#   cp backend/.env.example backend/.env   # sửa mật khẩu, FACEREG_*
+#   docker compose up -d --build
+# Trang web: http://localhost:8100  (đặt sau reverse proxy HTTPS khi dùng thật — camera chỉ chạy trên HTTPS)
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: examguard
+      POSTGRES_USER: examguard
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-doi-mat-khau-nay}
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U examguard"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "no", "--maxmemory", "1gb", "--maxmemory-policy", "noeviction"]
+  app:
+    build: .
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://examguard:${DB_PASSWORD:-doi-mat-khau-nay}@db:5432/examguard
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - appdata:/data
+      - ./backend/models:/app/backend/models:ro   # proctor_yolo.onnx, fusion_gru.onnx từ notebook 02, 03
+    ports: ["8100:8100"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+volumes:
+  dbdata:
+  appdata:

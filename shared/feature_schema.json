@@ -1,0 +1,400 @@
+{
+ "version": 1,
+ "window_seconds": 2,
+ "modalities": [
+  "face",
+  "identity",
+  "object",
+  "audio",
+  "browser",
+  "keystroke",
+  "answer",
+  "system"
+ ],
+ "features": [
+  {
+   "name": "face_count_mean",
+   "modality": "face",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số khuôn mặt trung bình"
+  },
+  {
+   "name": "face_count_max",
+   "modality": "face",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số khuôn mặt lớn nhất"
+  },
+  {
+   "name": "face_missing_ratio",
+   "modality": "face",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ mẫu không thấy mặt"
+  },
+  {
+   "name": "yaw_mean",
+   "modality": "face",
+   "scale": 45,
+   "source": "client",
+   "desc": "Góc quay ngang trung bình (độ, ước lượng từ 6 điểm)"
+  },
+  {
+   "name": "yaw_std",
+   "modality": "face",
+   "scale": 20,
+   "source": "client",
+   "desc": "Độ lệch chuẩn góc quay ngang"
+  },
+  {
+   "name": "pitch_mean",
+   "modality": "face",
+   "scale": 30,
+   "source": "client",
+   "desc": "Góc ngẩng/cúi trung bình (độ)"
+  },
+  {
+   "name": "pitch_std",
+   "modality": "face",
+   "scale": 15,
+   "source": "client",
+   "desc": "Độ lệch chuẩn góc ngẩng/cúi"
+  },
+  {
+   "name": "head_away_ratio",
+   "modality": "face",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ mẫu quay đầu quá ngưỡng (|yaw|>30° hoặc |pitch|>25°)"
+  },
+  {
+   "name": "box_shift",
+   "modality": "face",
+   "scale": 0.2,
+   "source": "client",
+   "desc": "Dịch chuyển tâm hộp mặt (theo chiều rộng khung)"
+  },
+  {
+   "name": "face_size",
+   "modality": "face",
+   "scale": 0.3,
+   "source": "client",
+   "desc": "Diện tích hộp mặt / diện tích khung"
+  },
+  {
+   "name": "face_conf",
+   "modality": "face",
+   "scale": 1,
+   "source": "client",
+   "desc": "Độ tin cậy dò mặt trung bình"
+  },
+  {
+   "name": "id_score",
+   "modality": "identity",
+   "scale": 1,
+   "source": "server",
+   "desc": "Điểm khớp gần nhất với ảnh đăng ký"
+  },
+  {
+   "name": "id_checked",
+   "modality": "identity",
+   "scale": 1,
+   "source": "server",
+   "desc": "Có lần xác thực lại trong cửa sổ"
+  },
+  {
+   "name": "id_mismatch",
+   "modality": "identity",
+   "scale": 1,
+   "source": "server",
+   "desc": "Lần xác thực gần nhất không khớp"
+  },
+  {
+   "name": "obj_phone",
+   "modality": "object",
+   "scale": 1,
+   "source": "server",
+   "desc": "Xác suất điện thoại"
+  },
+  {
+   "name": "obj_book",
+   "modality": "object",
+   "scale": 1,
+   "source": "server",
+   "desc": "Xác suất sách/giấy"
+  },
+  {
+   "name": "obj_headphone",
+   "modality": "object",
+   "scale": 1,
+   "source": "server",
+   "desc": "Xác suất tai nghe"
+  },
+  {
+   "name": "obj_person_extra",
+   "modality": "object",
+   "scale": 1,
+   "source": "server",
+   "desc": "Xác suất có người thứ hai (theo thân người)"
+  },
+  {
+   "name": "obj_screen",
+   "modality": "object",
+   "scale": 1,
+   "source": "server",
+   "desc": "Xác suất màn hình/laptop phụ"
+  },
+  {
+   "name": "obj_age",
+   "modality": "object",
+   "scale": 30,
+   "source": "server",
+   "desc": "Số giây kể từ khung gần nhất (độ tươi)"
+  },
+  {
+   "name": "speech_ratio",
+   "modality": "audio",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ thời gian có tiếng nói"
+  },
+  {
+   "name": "speech_segments",
+   "modality": "audio",
+   "scale": 3,
+   "source": "client",
+   "desc": "Số đoạn nói bắt đầu trong cửa sổ"
+  },
+  {
+   "name": "audio_energy",
+   "modality": "audio",
+   "scale": 1,
+   "source": "client",
+   "desc": "Năng lượng âm thanh (0..1, thang dB chuẩn hóa)"
+  },
+  {
+   "name": "hidden_sec",
+   "modality": "browser",
+   "scale": 2,
+   "source": "client",
+   "desc": "Số giây trang bị ẩn (rời tab)"
+  },
+  {
+   "name": "blur_sec",
+   "modality": "browser",
+   "scale": 2,
+   "source": "client",
+   "desc": "Số giây cửa sổ mất focus"
+  },
+  {
+   "name": "tab_switches",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần rời tab/cửa sổ"
+  },
+  {
+   "name": "fullscreen_exits",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần thoát toàn màn hình"
+  },
+  {
+   "name": "not_fullscreen_sec",
+   "modality": "browser",
+   "scale": 2,
+   "source": "client",
+   "desc": "Số giây không ở chế độ toàn màn hình"
+  },
+  {
+   "name": "window_small",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Cửa sổ bị thu nhỏ/chia đôi (0/1)"
+  },
+  {
+   "name": "screen_extended",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Đang có màn hình mở rộng (0/1, chỉ Chromium)"
+  },
+  {
+   "name": "screen_changes",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần thay đổi cấu hình màn hình"
+  },
+  {
+   "name": "paste_attempts",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần cố dán"
+  },
+  {
+   "name": "copy_attempts",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần cố sao chép/cắt đề"
+  },
+  {
+   "name": "drop_attempts",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần cố kéo thả"
+  },
+  {
+   "name": "contextmenu",
+   "modality": "browser",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần mở menu chuột phải"
+  },
+  {
+   "name": "chars_after_return",
+   "modality": "browser",
+   "scale": 20,
+   "source": "client",
+   "desc": "Số ký tự gõ trong 10 giây ngay sau khi quay lại tab"
+  },
+  {
+   "name": "keys",
+   "modality": "keystroke",
+   "scale": 10,
+   "source": "client",
+   "desc": "Số phím (đã trừ phím do bộ gõ sinh)"
+  },
+  {
+   "name": "dwell_rel",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Thời gian giữ phím TB / mức khởi động"
+  },
+  {
+   "name": "dwell_cv",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Hệ số biến thiên thời gian giữ phím"
+  },
+  {
+   "name": "flight_rel",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Khoảng cách giữa hai phím TB / mức khởi động"
+  },
+  {
+   "name": "flight_cv",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Hệ số biến thiên khoảng cách giữa hai phím"
+  },
+  {
+   "name": "burst_ratio",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ khoảng cách < 150 ms"
+  },
+  {
+   "name": "pause_ratio",
+   "modality": "keystroke",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ khoảng cách > 2 giây"
+  },
+  {
+   "name": "backspace_ratio",
+   "modality": "keystroke",
+   "scale": 0.3,
+   "source": "client",
+   "desc": "Tỉ lệ phím xóa/sửa"
+  },
+  {
+   "name": "compositions",
+   "modality": "keystroke",
+   "scale": 3,
+   "source": "client",
+   "desc": "Số lần bộ gõ IME ghép chữ"
+  },
+  {
+   "name": "chars_per_sec",
+   "modality": "keystroke",
+   "scale": 5,
+   "source": "client",
+   "desc": "Ký tự/giây"
+  },
+  {
+   "name": "question_switches",
+   "modality": "answer",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần chuyển câu"
+  },
+  {
+   "name": "answer_changes",
+   "modality": "answer",
+   "scale": 1,
+   "source": "client",
+   "desc": "Số lần đổi đáp án"
+  },
+  {
+   "name": "time_on_question",
+   "modality": "answer",
+   "scale": 60,
+   "source": "client",
+   "desc": "Số giây đã ở câu hiện tại"
+  },
+  {
+   "name": "progress",
+   "modality": "answer",
+   "scale": 1,
+   "source": "client",
+   "desc": "Tỉ lệ câu đã trả lời"
+  },
+  {
+   "name": "time_vs_expected",
+   "modality": "answer",
+   "scale": 2,
+   "source": "client",
+   "desc": "(thời gian trả lời - kỳ vọng theo độ khó) / độ lệch, âm = nhanh bất thường"
+  },
+  {
+   "name": "lag_ms",
+   "modality": "system",
+   "scale": 200,
+   "source": "client",
+   "desc": "Độ trễ khung hình giao diện làm bài (watchdog)"
+  },
+  {
+   "name": "offline",
+   "modality": "system",
+   "scale": 1,
+   "source": "client",
+   "desc": "Mất kết nối trong cửa sổ (0/1, không coi là gian lận)"
+  },
+  {
+   "name": "monitor_load",
+   "modality": "system",
+   "scale": 0.2,
+   "source": "client",
+   "desc": "Tỉ lệ thời gian CPU dành cho giám sát"
+  }
+ ],
+ "model_input": "concat(clip(x/scale,-5,5) cho từng đặc trưng, mask theo phương thức 0/1) -> 54 + 8 = 62 chiều",
+ "privacy": {
+  "keystroke_laplace_epsilon": 2.0,
+  "keystroke_quantize": 0.05,
+  "warmup_seconds": 60
+ }
+}

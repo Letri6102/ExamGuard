@@ -1,0 +1,13 @@
+backend/.venv/
+backend/data/
+backend/.env
+backend/models/*.onnx
+**/__pycache__/
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/public/mediapipe/
+frontend/public/vad/
+frontend/public/models/
+notebooks/.ipynb_checkpoints/
+.DS_Store
