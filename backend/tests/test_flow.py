@@ -205,3 +205,82 @@ def test_optional_facereg_skip(client, monkeypatch):
     CH, _ = candidate_login(c, "SV2", roster["SV2"])
     assert c.post("/api/exam/facereg/skip", headers=CH).json()["status"] == "verified"
     assert c.post("/api/exam/start", headers=CH).status_code == 200
+
+
+def _start_candidate(c, H, code="SV1"):
+    exam_id, roster = setup_exam(c, H, require_facereg=False)
+    CH, tok = candidate_login(c, code, roster[code])
+    c.post("/api/exam/facereg/skip", headers=CH)
+    c.post("/api/exam/start", headers=CH)
+    return exam_id, CH, tok
+
+
+def _recv_until(ws, pred, limit=10):
+    for _ in range(limit):
+        m = ws.receive_json()
+        if pred(m):
+            return m
+    raise AssertionError("không nhận được tin mong đợi")
+
+
+def test_realtime_warnings(client):
+    c = client
+    H = admin_headers(c)
+    exam_id, CH, tok = _start_candidate(c, H)
+    st = c.get("/api/exam/state", headers=CH).json()
+    assert st["warnings"] == {"enabled": True, "cooldown": 30}
+    pipe = c.app.state.pipeline
+    attempt_id = c.get(f"/api/proctor/exams/{exam_id}/attempts", headers=H).json()[0]["id"]
+    with c.websocket_connect(f"/ws/exam?token={tok}") as ws:
+        ws.send_json({"type": "windows", "windows": [window(0)]})
+        _recv_until(ws, lambda m: m["type"] == "ack")
+        assert pipe.candidates.connected(attempt_id)
+
+        # YOLO thấy điện thoại -> cảnh báo PHONE (giả lập kết quả YOLO + cho phép phương thức vật thể)
+        state = wait_for(lambda: pipe.states.get(attempt_id))
+        pipe.detector = object()  # chỉ để _server_features coi phương thức vật thể là có
+        import time as _t
+        state.objects["obj_phone"] = (0.9, _t.time())
+        state.last_frame_at = _t.time()
+        ws.send_json({"type": "windows", "windows": [window(1)]})
+        ws.send_json({"type": "windows", "windows": [window(2)]})  # điện thoại vẫn còn: trong thời gian chờ
+        wait_for(lambda: state.last_t_index == 2)  # pipeline đã xử lý xong cả hai cửa sổ
+        ws.send_json({"type": "ping"})
+        got = []
+        while True:
+            m = ws.receive_json()
+            got.append(m)
+            if m["type"] == "pong":
+                break
+        warned = [m["code"] for m in got if m["type"] == "warning"]
+        # PHONE (trọng số 0,6) đẩy rủi ro lên 60 = ngưỡng -> mở cờ -> FLAGGED; PHONE chỉ gửi 1 lần (thời gian chờ)
+        assert "FLAGGED" in warned and warned.count("PHONE") == 1, warned
+        pipe.detector = None
+
+        # giám thị gửi cảnh báo -> tới màn hình thí sinh, được ghi vào dòng thời gian + nhật ký
+        r = c.post(f"/api/proctor/attempts/{attempt_id}/warn", json={"message": "Vui lòng cất điện thoại"}, headers=H).json()
+        assert r["delivered"] is True
+        m = _recv_until(ws, lambda m: m["type"] == "warning")
+        assert m == {"type": "warning", "code": "PROCTOR", "text": "Vui lòng cất điện thoại"}
+    assert not pipe.candidates.connected(attempt_id)
+    r = c.post(f"/api/proctor/attempts/{attempt_id}/warn", json={"message": "Còn đó không?"}, headers=H).json()
+    assert r["delivered"] is False  # thí sinh không còn kết nối: vẫn ghi lại
+    d = c.get(f"/api/proctor/attempts/{attempt_id}", headers=H).json()
+    pw = [e for e in d["events"] if e["kind"] == "proctor_warning"]
+    assert [e["detail"]["delivered"] for e in pw] == [True, False]
+    assert any(a["action"] == "warn_candidate" for a in c.get("/api/admin/audit", headers=H).json())
+    assert c.post(f"/api/proctor/attempts/{attempt_id}/warn", json={"message": "x"}, headers=H).status_code == 422
+
+
+def test_warnings_can_be_disabled(client):
+    c = client
+    c.app.state.settings.candidate_warnings = False
+    H = admin_headers(c)
+    exam_id, CH, tok = _start_candidate(c, H)
+    assert c.get("/api/exam/state", headers=CH).json()["warnings"]["enabled"] is False
+    with c.websocket_connect(f"/ws/exam?token={tok}") as ws:
+        ws.send_json({"type": "windows", "windows": [window(0, hidden_sec=2, tab_switches=1, chars_after_return=40, paste_attempts=1)]})
+        _recv_until(ws, lambda m: m["type"] == "ack")
+        ws.send_json({"type": "ping"})
+        m = ws.receive_json()
+        assert m["type"] == "pong"  # không có tin "warning" nào chen vào

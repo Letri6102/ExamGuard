@@ -95,8 +95,18 @@ def main() -> int:
         print(f"\nKỳ thi {exam.code}: {exam.title} | bắt buộc FaceReg: {exam.require_facereg}")
         rows = db.execute(select(Candidate.code, Registration.access_code).join(Registration)
                           .where(Registration.exam_id == exam.id).order_by(Candidate.code)).all()
+        lines = [f"Kỳ thi {exam.code} — đăng nhập thí sinh: mã kỳ thi / số báo danh / mã dự thi"]
         for code, ac in rows:
             print(f"  {code}  mã dự thi: {ac}")
+            lines.append(f"  {exam.code} / {code} / {ac}")
+        if "pw" in locals():
+            lines.append(f"Giám thị: giamthi / {pw}")
+        f = s.data_dir / "demo_accounts.txt"
+        old = f.read_text().splitlines() if f.exists() else []
+        keep = [l for l in old if l.startswith("Giám thị:")] if "pw" not in locals() else []
+        f.write_text("\n".join(lines + keep) + "\n")
+        f.chmod(0o600)
+        print(f"\nĐã ghi tài khoản thử vào {f}")
     return 0
 
 

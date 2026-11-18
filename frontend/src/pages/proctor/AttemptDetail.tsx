@@ -3,13 +3,61 @@ import { useParams } from "react-router-dom";
 import { api, apiBlob, fmtSec, fmtTime } from "../../api";
 import RiskTimeline from "../../components/RiskTimeline";
 import { Card, Err, RiskBar, STATUS_VI, StaffHeader, useLoad, useStaff } from "../../components/ui";
+import { WARNINGS, type WarningCode } from "../../monitor/warnings";
 
 const MOD_VI: Record<string, string> = { face: "Khuôn mặt", identity: "Danh tính", object: "Vật thể", audio: "Âm thanh",
   browser: "Trình duyệt", keystroke: "Nhịp gõ", answer: "Bài làm", system: "Hệ thống" };
 const EV_VI: Record<string, string> = { tab_hidden: "Rời tab", tab_visible: "Quay lại tab", window_blur: "Mất focus cửa sổ",
   window_focus: "Quay lại cửa sổ", fullscreen_exit: "Thoát toàn màn hình", fullscreen_enter: "Vào lại toàn màn hình",
   paste_blocked: "Chặn dán", copy_blocked: "Chặn sao chép", drop_blocked: "Chặn kéo thả", screen_change: "Đổi cấu hình màn hình",
-  burst: "Chụp chùm khung", q_view: "Xem câu" };
+  burst: "Chụp chùm khung", q_view: "Xem câu", warning: "Đã cảnh báo thí sinh", warning_ack: "Thí sinh bấm \"Tôi đã hiểu\"",
+  proctor_warning: "Giám thị gửi cảnh báo" };
+
+function eventDetail(kind: string, d: any): string {
+  if (kind === "warning" || kind === "warning_ack") {
+    const w = WARNINGS[d?.code as WarningCode];
+    const title = w ? w.title : d?.code;
+    return kind === "warning" ? `${title}${d?.text ? `: "${d.text}"` : ""} (lần ${d?.n ?? "?"}, ${d?.mode === "modal" ? "hộp thoại" : "thông báo"})` : title;
+  }
+  if (kind === "proctor_warning") return `"${d?.text}" · ${d?.by} · ${d?.delivered ? "đã tới màn hình thí sinh" : "thí sinh không kết nối"}`;
+  return JSON.stringify(d) === "{}" ? "" : JSON.stringify(d);
+}
+
+const PRESETS = ["Vui lòng nhìn vào màn hình bài thi.", "Không trao đổi với người khác trong giờ thi.",
+  "Hãy cất điện thoại ra khỏi tầm tay.", "Hãy quay lại chế độ toàn màn hình.", "Hãy ngồi ngay ngắn trước camera."];
+
+function SendWarning({ attemptId, active, onSent }: { attemptId: number; active: boolean; onSent: () => void }) {
+  const [msg, setMsg] = useState("");
+  const [res, setRes] = useState("");
+  const [err, setErr] = useState("");
+  const send = async () => {
+    try {
+      const r = await api("staff", `/api/proctor/attempts/${attemptId}/warn`, { method: "POST", json: { message: msg } });
+      setRes(r.delivered ? "Đã hiện trên màn hình thí sinh." : "Thí sinh đang mất kết nối: cảnh báo chưa tới, nhưng đã được ghi lại.");
+      setErr("");
+      setMsg("");
+      onSent();
+    } catch (e: any) {
+      setErr(e.message);
+      setRes("");
+    }
+  };
+  return (
+    <Card title="Gửi cảnh báo cho thí sinh">
+      {!active ? <p className="muted">Chỉ gửi được khi thí sinh đang làm bài.</p> : (
+        <>
+          <div className="row">{PRESETS.map((p) => <button key={p} className="secondary shrink" onClick={() => setMsg(p)}>{p}</button>)}</div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <input value={msg} maxLength={300} onChange={(e) => setMsg(e.target.value)} placeholder="Nội dung cảnh báo (hiện ngay trên màn hình thí sinh)" />
+            <button className="danger shrink" onClick={send} disabled={msg.trim().length < 3}>Gửi cảnh báo</button>
+          </div>
+          {res && <div className="alert ok">{res}</div>}
+          <Err msg={err} />
+        </>
+      )}
+    </Card>
+  );
+}
 
 function Evidence({ flagId, names }: { flagId: number; names: string[] }) {
   const [urls, setUrls] = useState<string[]>([]);
@@ -81,6 +129,8 @@ export default function AttemptDetail() {
               {pickT !== null && <WindowInspector attemptId={d.attempt.id} t={pickT} names={d.feature_names} />}
             </Card>
 
+            <SendWarning attemptId={d.attempt.id} active={d.attempt.status === "in_progress"} onSent={reload} />
+
             <Card title={`Cờ (${d.flags.length})`}>
               {!d.flags.length && <p className="muted">Không có cờ.</p>}
               {d.flags.map((f: any) => (
@@ -113,7 +163,7 @@ export default function AttemptDetail() {
               <Card title="Sự kiện trình duyệt">
                 <div style={{ maxHeight: 300, overflow: "auto" }}>
                   <table><tbody>{d.events.filter((e: any) => e.kind !== "q_view").slice(-300).map((e: any, k: number) => (
-                    <tr key={k}><td>{fmtSec(e.t)}</td><td>{EV_VI[e.kind] || e.kind}</td><td className="muted">{JSON.stringify(e.detail) === "{}" ? "" : JSON.stringify(e.detail)}</td></tr>
+                    <tr key={k}><td>{fmtSec(e.t)}</td><td>{EV_VI[e.kind] || e.kind}</td><td className="muted">{eventDetail(e.kind, e.detail)}</td></tr>
                   ))}</tbody></table>
                 </div>
               </Card>

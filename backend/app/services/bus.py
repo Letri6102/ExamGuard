@@ -155,6 +155,32 @@ class RedisBus:
         await self.r.aclose()
 
 
+class CandidateHub:
+    """WebSocket đang mở của từng thí sinh -> đẩy cảnh báo tức thời (từ YOLO, cờ rủi ro, giám thị)."""
+
+    def __init__(self):
+        self.subs: dict[int, set] = {}
+
+    def subscribe(self, attempt_id: int, ws) -> None:
+        self.subs.setdefault(attempt_id, set()).add(ws)
+
+    def unsubscribe(self, attempt_id: int, ws) -> None:
+        self.subs.get(attempt_id, set()).discard(ws)
+
+    def connected(self, attempt_id: int) -> bool:
+        return bool(self.subs.get(attempt_id))
+
+    async def send(self, attempt_id: int, msg: dict) -> bool:
+        delivered = False
+        for ws in list(self.subs.get(attempt_id, ())):
+            try:
+                await ws.send_json(msg)
+                delivered = True
+            except Exception:  # noqa: BLE001
+                self.unsubscribe(attempt_id, ws)
+        return delivered
+
+
 class Hub:
     """Đẩy cập nhật tới dashboard giám thị. Chỉ gửi khi điểm rủi ro/trạng thái thay đổi."""
 

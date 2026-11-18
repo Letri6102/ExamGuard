@@ -19,7 +19,7 @@ from sqlalchemy import insert, select, update
 from .. import db as dbmod
 from ..config import Settings
 from ..models import Attempt, FeatureWindow, Flag, Registration, SessionEvent
-from .bus import Hub, InMemoryBus
+from .bus import CandidateHub, Hub, InMemoryBus
 from .risk import FeatureSpec, FusionScorer, RuleScorer, load_scorer, update_risk
 from .vision import load_detector
 
@@ -27,6 +27,9 @@ log = logging.getLogger("examguard.pipeline")
 
 OBJECT_GROUPS = ["obj_phone", "obj_book", "obj_headphone", "obj_person_extra", "obj_screen"]
 OBJECT_TTL = 15.0      # kết quả vật thể còn hiệu lực bao lâu (giây)
+# Luật chỉ server phát hiện được (trình duyệt không biết) -> đẩy cảnh báo tức thời cho thí sinh.
+# Các hành vi trình duyệt tự phát hiện (rời tab, dán, mất mặt...) được cảnh báo ngay trên máy, không qua server.
+SERVER_WARNINGS = ("PHONE", "PERSON_EXTRA", "HEADPHONE", "BOOK", "SCREEN")
 WINDOW = 2.0
 
 
@@ -52,6 +55,7 @@ class AttemptState:
     last_push_at: float = 0.0
     burst: deque = field(default_factory=lambda: deque(maxlen=40))  # (thời điểm, t_rel, jpeg) khung chùm sự kiện
     last_t_index: int = -1
+    warned: dict[str, float] = field(default_factory=dict)  # mã cảnh báo -> lần gửi gần nhất
 
 
 class Pipeline:
@@ -62,6 +66,7 @@ class Pipeline:
         self.detector = load_detector(settings.yolo_model, settings.yolo_classes)
         self.bus = bus or InMemoryBus(settings.frame_queue_max)
         self.hub = hub or Hub()
+        self.candidates = CandidateHub()
         self.states: dict[int, AttemptState] = {}
         self.tasks: list[asyncio.Task] = []
         self.latencies: deque = deque(maxlen=5000)   # giây: nhận cửa sổ -> cập nhật dashboard
@@ -159,7 +164,7 @@ class Pipeline:
 
     async def _process_features(self, msgs: list[dict]) -> None:
         now = time.time()
-        rows, events, flag_ops, touched = [], [], [], {}
+        rows, events, flag_ops, touched, warnings = [], [], [], {}, []
         msgs.sort(key=lambda x: (x["a"], x["w"]["t"]))
         for msg in msgs:
             st = await self.state(int(msg["a"]))
@@ -191,9 +196,13 @@ class Pipeline:
                 events.append({"attempt_id": st.attempt_id, "t": float(e.get("t", t_index * WINDOW)),
                                "kind": str(e.get("k", "event"))[:32], "detail_json": json.dumps(e.get("d", {}))[:2000]})
             if not replay:
-                flag_ops.extend(self._flag_logic(st, t_index * WINDOW, reasons, now))
+                ops = self._flag_logic(st, t_index * WINDOW, reasons, now)
+                flag_ops.extend(ops)
+                warnings.extend(self._server_warnings(st, reasons, ops, now))
             touched[st.attempt_id] = (st, msg.get("rx", now))
         await asyncio.to_thread(self._flush, rows, events, flag_ops, [st for st, _ in touched.values()], now)
+        for attempt_id, msg in warnings:
+            await self.candidates.send(attempt_id, msg)
         for st, rx in touched.values():
             changed = abs(st.risk - st.last_push) >= 2 or now - st.last_push_at > 10
             if changed or any(op["st"] is st for op in flag_ops):
@@ -202,6 +211,19 @@ class Pipeline:
                                                     "peak": st.peak, "flagged": st.open_flag is not None,
                                                     "last_seen": now})
                 self.latencies.append(time.time() - rx)
+
+    def _server_warnings(self, st: AttemptState, reasons: list[dict], flag_ops: list[dict], now: float) -> list[tuple[int, dict]]:
+        if not self.s.candidate_warnings:
+            return []
+        codes = [r["code"] for r in reasons if r["code"] in SERVER_WARNINGS]
+        if self.s.warn_on_flag and any(op["op"] == "create" for op in flag_ops):
+            codes.append("FLAGGED")
+        out = []
+        for code in codes:
+            if now - st.warned.get(code, 0) >= self.s.warning_cooldown_seconds:
+                st.warned[code] = now
+                out.append((st.attempt_id, {"type": "warning", "code": code}))
+        return out
 
     def _flag_logic(self, st: AttemptState, t_rel: float, reasons: list[dict], now: float) -> list[dict]:
         ops = []

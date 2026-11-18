@@ -67,6 +67,11 @@ class Settings:
     reverify_min_seconds: int
     reverify_max_seconds: int
 
+    # Cảnh báo tức thời cho thí sinh
+    candidate_warnings: bool
+    warn_on_flag: bool
+    warning_cooldown_seconds: int
+
     schema: dict = field(default_factory=dict)
 
     @property
@@ -141,6 +146,9 @@ def load_settings() -> Settings:
         evidence_retention_days=_env("EVIDENCE_RETENTION_DAYS", 30, int),
         reverify_min_seconds=_env("REVERIFY_MIN_SECONDS", 60, int),
         reverify_max_seconds=_env("REVERIFY_MAX_SECONDS", 180, int),
+        candidate_warnings=_env("CANDIDATE_WARNINGS", True, bool),
+        warn_on_flag=_env("WARN_ON_FLAG", True, bool),
+        warning_cooldown_seconds=_env("WARNING_COOLDOWN_SECONDS", 30, int),
         schema=json.loads(SCHEMA_PATH.read_text(encoding="utf-8")),
     )
     s.evidence_dir.mkdir(parents=True, exist_ok=True)

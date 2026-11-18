@@ -12,6 +12,10 @@ import { BrowserGuard, type GuardEvent } from "./browser";
 import { blurredFrame, faceCrop, FaceTracker, pose, type Face } from "./face";
 import { faceWindow, type FaceSample } from "./features";
 import { Transport, type NetStatus } from "./transport";
+import { WarningDetector, warningForGuardEvent, WarningPolicy, type WarningCode } from "./warnings";
+
+/** Một cảnh báo cần hiện cho thí sinh (đã qua chính sách thời gian chờ / nâng mức). */
+export type CandidateWarning = { code: WarningCode; count: number; mode: "toast" | "modal"; source: "client" | "server"; text?: string };
 
 export type AnswerFeatures = () => Record<string, number>;
 
@@ -39,6 +43,8 @@ type Opts = {
   lowTier: boolean;
   onStatus: (s: MonitorStatus) => void;
   onEvent?: (e: GuardEvent) => void;
+  onWarning?: (w: CandidateWarning) => void;
+  warnings?: { enabled: boolean; cooldown: number; counts: Record<string, number>; save: (c: Record<string, number>) => void };
 };
 
 const WINDOW_MS = (schema.window_seconds || 2) * 1000;
@@ -64,21 +70,46 @@ export class ExamMonitor {
   private busyMs = 0;
   private stopped = false;
   private extraEvents: GuardEvent[] = [];
+  private detector = new WarningDetector();
+  private policy: WarningPolicy;
   status: MonitorStatus = { net: "offline", faces: 0, audio: "off", fullscreen: false, lagMs: 0, framesSent: 0,
     lastIdentity: "", windowsSent: 0, degraded: false };
 
   constructor(o: Opts) {
     this.o = o;
-    this.transport = new Transport(o.token, o.attemptId, (s) => this.update({ net: s }));
+    this.transport = new Transport(o.token, o.attemptId, (s) => this.update({ net: s }),
+      (code, text) => this.warn(code, "server", text));
+    const w = o.warnings || { enabled: true, cooldown: 30, counts: {}, save: () => {} };
+    this.policy = new WarningPolicy(w.cooldown, w.counts, w.save);
     this.guard = new BrowserGuard({
       questionArea: o.questionArea, t0: this.t0, onReturn: () => this.burst("return"),
-      onEvent: o.onEvent, warmupSeconds: schema.privacy.warmup_seconds, epsilon: schema.privacy.keystroke_laplace_epsilon,
+      onEvent: (e) => {
+        const code = warningForGuardEvent(e.k, e.d);
+        if (code) this.warn(code, "client");
+        o.onEvent?.(e);
+      },
+      warmupSeconds: schema.privacy.warmup_seconds, epsilon: schema.privacy.keystroke_laplace_epsilon,
       quantize: schema.privacy.keystroke_quantize,
     });
     if (o.lowTier) this.faceInterval = 1500;
   }
 
   private elapsed = () => (performance.now() - this.t0) / 1000;
+
+  /** Hiện cảnh báo cho thí sinh (theo chính sách) và ghi lại vào dòng thời gian cho giám thị. */
+  warn(code: WarningCode, source: "client" | "server", text?: string): void {
+    if (this.stopped || !(this.o.warnings?.enabled ?? true) || !this.o.onWarning) return;
+    const d = this.policy.decide(code, this.elapsed());
+    if (!d.show) return;
+    this.extraEvents.push({ t: Math.round(this.elapsed() * 10) / 10, k: "warning",
+      d: { code, n: d.count, src: source, mode: d.mode, ...(text ? { text: text.slice(0, 300) } : {}) } });
+    this.o.onWarning({ code, count: d.count, mode: d.mode, source, text });
+  }
+
+  /** Thí sinh bấm "Tôi đã hiểu". */
+  ackWarning(code: WarningCode): void {
+    this.extraEvents.push({ t: Math.round(this.elapsed() * 10) / 10, k: "warning_ack", d: { code } });
+  }
 
   private update(p: Partial<MonitorStatus>) {
     this.status = { ...this.status, ...p };
@@ -100,6 +131,7 @@ export class ExamMonitor {
       this.rafId = requestAnimationFrame(rafLoop);
     };
     this.rafId = requestAnimationFrame(rafLoop);
+    this.o.stream.getVideoTracks().forEach((tr) => tr.addEventListener("ended", () => this.warn("CAMERA_OFF", "client")));
     this.loopFace();
     this.timers.push(window.setInterval(() => this.emitWindow(), WINDOW_MS));
     this.scheduleSample();
@@ -128,6 +160,8 @@ export class ExamMonitor {
       this.missingSince = 0;
     }
     if (faces.length >= 2) this.burst("multi_face");
+    const turned = !!main && (Math.abs(p.yaw) > 30 || Math.abs(p.pitch) > 25);
+    for (const code of this.detector.face(now, faces.length, turned)) this.warn(code, "client");
     const away = main && (Math.abs(p.yaw) > 30 || Math.abs(p.pitch) > 25);
     if (away) {
       if (!this.awaySince) this.awaySince = now;
@@ -195,6 +229,7 @@ export class ExamMonitor {
       fd.append("reason", reason);
       const r = await api("candidate", "/api/exam/reverify", { method: "POST", body: fd });
       this.update({ lastIdentity: r.status });
+      if (r.status === "MISMATCH") this.warn("ID_MISMATCH", "client");
       if (reason === "periodic") this.scheduleReverify(r.next_in || rand(this.o.reverify.min, this.o.reverify.max));
     } catch {
       if (reason === "periodic") this.scheduleReverify(60);
@@ -211,6 +246,7 @@ export class ExamMonitor {
     const faceAvail = this.faceSamples.length > 0;
     this.faceSamples = [];
     const audio = this.audio.window();
+    if (audio.available) for (const code of this.detector.speech(audio.values.speech_ratio)) this.warn(code, "client");
     const g = this.guard.window();
     const answer = this.o.answerFeatures();
     const lag = Math.max(0, this.lagMax);

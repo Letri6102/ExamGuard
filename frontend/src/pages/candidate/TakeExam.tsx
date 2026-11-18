@@ -4,7 +4,8 @@ import { api, auth, fmtSec } from "../../api";
 import { Err } from "../../components/ui";
 import { getStream, getTracker, releaseMedia } from "../../media";
 import { timeVsExpected } from "../../monitor/features";
-import { ExamMonitor, type MonitorStatus } from "../../monitor/monitor";
+import WarningCenter, { type ShownWarning } from "../../components/WarningCenter";
+import { ExamMonitor, type CandidateWarning, type MonitorStatus } from "../../monitor/monitor";
 
 type Q = { position: number; total: number; type: "single" | "multi" | "essay" | "numeric"; stem: string; options: string[];
   answer: any; expected_seconds: number; per_question_seconds: number | null };
@@ -28,6 +29,19 @@ export default function TakeExam() {
   const [now, setNow] = useState(Date.now());
   const [wmPos, setWmPos] = useState("0px 0px");
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [toasts, setToasts] = useState<ShownWarning[]>([]);
+  const [modals, setModals] = useState<ShownWarning[]>([]);
+  const warnSeq = useRef(0);
+  const onWarning = useCallback((w: CandidateWarning) => {
+    const shown = { ...w, id: ++warnSeq.current, at: Date.now() };
+    if (w.mode === "modal") setModals((q) => (q.some((x) => x.code === w.code) ? q : [...q, shown]));
+    else setToasts((t) => [...t.filter((x) => x.code !== w.code), shown].slice(-3));
+  }, []);
+  const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+  const ackWarning = useCallback((w: ShownWarning) => {
+    monitor.current?.ackWarning(w.code);
+    setModals((q) => q.filter((x) => x.id !== w.id));
+  }, []);
   const monitor = useRef<ExamMonitor | null>(null);
   const video = useRef<HTMLVideoElement>(null);
   const qArea = useRef<HTMLDivElement>(null);
@@ -110,6 +124,12 @@ export default function TakeExam() {
         token: auth.token("candidate"), attemptId: info?.attempt?.id ?? st.attempt.id, stream, video: video.current!,
         tracker: tr, answerFeatures: () => answerFeaturesRef.current(), questionArea: () => qArea.current,
         reverify: st.reverify, lowTier: st.attempt.device_tier === "low", onStatus: setMon,
+        onWarning,
+        warnings: {
+          enabled: st.warnings?.enabled ?? true, cooldown: st.warnings?.cooldown ?? 30,
+          counts: readWarnCounts(st.attempt.id),
+          save: (c) => { try { sessionStorage.setItem(`eg_warn_${st.attempt.id}`, JSON.stringify(c)); } catch { /* bỏ qua */ } },
+        },
       });
       monitor.current = m;
       await m.start();
@@ -236,6 +256,7 @@ export default function TakeExam() {
           </div>
         </div>
       )}
+      {started && <WarningCenter toasts={toasts} modal={modals[0] || null} onDismissToast={dismissToast} onAck={ackWarning} />}
       {confirmSubmit && (
         <div className="overlay">
           <div className="card">
@@ -250,4 +271,12 @@ export default function TakeExam() {
       )}
     </div>
   );
+}
+
+function readWarnCounts(attemptId: number): Record<string, number> {
+  try {
+    return JSON.parse(sessionStorage.getItem(`eg_warn_${attemptId}`) || "{}");
+  } catch {
+    return {};
+  }
 }

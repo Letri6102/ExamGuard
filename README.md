@@ -80,6 +80,15 @@ FaceReg → **sinh đề riêng** (hoán vị câu, hoán vị đáp án, tham s
 | Khung hình | 320 px, **mặt bị pixel hóa trên máy**, mỗi 5–10 s ngẫu nhiên + chùm 3–5 khung khi có sự kiện | JPEG ~10 KB |
 | Watchdog | đo độ trễ khung hình giao diện; chậm → giảm tần suất | `lag_ms`, `monitor_load` |
 
+**Cảnh báo tức thời cho thí sinh** (`frontend/src/monitor/warnings.ts`): khi phát hiện hành vi, màn hình thí sinh hiện cảnh báo
+ngay để biết và không tái phạm. Lần đầu là thông báo nhỏ tự ẩn; tái phạm cùng loại (sau thời gian chờ 30 giây) hoặc loại nghiêm trọng
+(bị gắn cờ, khuôn mặt không khớp, tin của giám thị) là hộp thoại phải bấm "Tôi đã hiểu". Không khóa bài. Nguồn cảnh báo:
+- trên máy, tức thì: rời tab, mất focus, thoát toàn màn hình, cố dán/sao chép, màn hình phụ, không thấy mặt ≥ 5 giây,
+  có người khác (2 mẫu liên tiếp), quay đầu ≥ 5 giây, có tiếng nói ≥ 4 giây, camera bị tắt, xác thực lại không khớp;
+- từ server qua WebSocket: điện thoại, tai nghe, sách, người thứ hai, màn hình phụ (YOLO) và khi phiên bị gắn cờ;
+- từ giám thị: ô "Gửi cảnh báo cho thí sinh" trên trang chi tiết phiên.
+Mọi lần hiện cảnh báo và lần thí sinh xác nhận đều nằm trong dòng sự kiện của giám thị. Tắt/bật: `CANDIDATE_WARNINGS`, `WARN_ON_FLAG`.
+
 Mất mạng: đặc trưng và câu trả lời đệm trong IndexedDB, gửi bù khi có lại (server bỏ trùng); mất mạng chỉ ghi nhận, không coi là gian lận.
 Không có thao tác nào tự khóa bài.
 

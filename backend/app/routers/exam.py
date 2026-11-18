@@ -69,6 +69,8 @@ def state(request: Request, att: Attempt = Depends(current_attempt), db: Session
         "progress": {"answered": len(answered_pos), "answered_positions": sorted(answered_pos), "total": total},
         "reverify": {"min": request.app.state.settings.reverify_min_seconds,
                      "max": request.app.state.settings.reverify_max_seconds},
+        "warnings": {"enabled": request.app.state.settings.candidate_warnings,
+                     "cooldown": request.app.state.settings.warning_cooldown_seconds},
         "schema_version": request.app.state.settings.schema["version"],
     }
 
@@ -308,6 +310,7 @@ async def ws_exam(ws: WebSocket, token: str = ""):
             return
     await ws.accept()
     pipe = app.state.pipeline
+    pipe.candidates.subscribe(attempt_id, ws)  # nhận cảnh báo tức thời từ server
     try:
         while True:
             msg = await ws.receive_json()
@@ -331,3 +334,5 @@ async def ws_exam(ws: WebSocket, token: str = ""):
         pass
     except Exception:  # noqa: BLE001
         await ws.close(code=1011)
+    finally:
+        pipe.candidates.unsubscribe(attempt_id, ws)

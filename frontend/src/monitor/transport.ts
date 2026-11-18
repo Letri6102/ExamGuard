@@ -5,6 +5,7 @@
  */
 import { api, wsUrl } from "../api";
 import { Outbox, pad } from "./store";
+import { WARNINGS, type WarningCode } from "./warnings";
 
 export type Window = { t: number; v: Record<string, number>; m: Record<string, number>; ev: unknown[] };
 type WinItem = { key: string; w: Window };
@@ -26,7 +27,8 @@ export class Transport {
   framesSent = 0;
   framesDropped = 0;
 
-  constructor(private token: string, private attempt: number, private onStatus: (s: NetStatus) => void) {}
+  constructor(private token: string, private attempt: number, private onStatus: (s: NetStatus) => void,
+              private onServerWarning: (code: WarningCode, text?: string) => void = () => {}) {}
 
   start(): void {
     this.connect();
@@ -65,6 +67,7 @@ export class Transport {
       try {
         const msg = JSON.parse(m.data);
         if (msg.type === "ack") this.ackUpTo(msg.t);
+        else if (msg.type === "warning" && msg.code in WARNINGS) this.onServerWarning(msg.code as WarningCode, msg.text);
       } catch {
         /* bỏ qua */
       }

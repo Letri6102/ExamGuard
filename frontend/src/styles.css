@@ -125,3 +125,16 @@ pre.code { background: var(--bg); padding: 10px; border-radius: 8px; overflow-x:
   header.top { flex-wrap: wrap; }
   .exam-bar .timer { margin-left: 0; }
 }
+
+/* ---------- Cảnh báo cho thí sinh ---------- */
+.toast-stack { position: fixed; top: 64px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--warn); border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 14px; }
+.toast.bad { border-left-color: var(--bad); }
+.toast.info { border-left-color: var(--brand); }
+.toast-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 2px; }
+.toast-head b { flex: 1; }
+.toast-x { background: transparent; border: 0; color: var(--muted); padding: 0 4px; font-size: 18px; line-height: 1; }
+.warning-overlay { z-index: 70; }
+.warning-card { border-top: 6px solid var(--warn); }
+.warning-card.bad { border-top-color: var(--bad); }
+.warning-card h2 { color: var(--bad); }

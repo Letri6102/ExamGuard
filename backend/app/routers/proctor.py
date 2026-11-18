@@ -107,6 +107,29 @@ def attempt_windows(attempt_id: int, request: Request, start: float = 0, end: fl
                       "s": w.window_score} for w in wins]}
 
 
+class WarnIn(BaseModel):
+    message: str = Field(..., min_length=3, max_length=300)
+
+
+@router.post("/attempts/{attempt_id}/warn")
+async def warn_candidate(attempt_id: int, body: WarnIn, request: Request, user: User = Depends(require_staff),
+                         db: Session = Depends(get_db)):
+    """Giám thị gửi cảnh báo tới màn hình thí sinh ngay lập tức (qua WebSocket đang mở)."""
+    a = db.get(Attempt, attempt_id)
+    if not a:
+        raise HTTPException(404, "Không tìm thấy phiên thi.")
+    if a.status != "in_progress":
+        raise HTTPException(409, "Thí sinh không còn đang làm bài.")
+    msg = body.message.strip()
+    delivered = await request.app.state.pipeline.candidates.send(attempt_id, {"type": "warning", "code": "PROCTOR", "text": msg})
+    t = time.time() - (a.started_at or time.time())
+    db.add(SessionEvent(attempt_id=attempt_id, t=t, kind="proctor_warning",
+                        detail_json=json.dumps({"text": msg, "by": user.username, "delivered": delivered}, ensure_ascii=False)))
+    db.commit()
+    audit(db, request, user, "warn_candidate", a.pseudonym, msg)
+    return {"delivered": delivered}
+
+
 class FlagReviewIn(BaseModel):
     status: str = Field(..., pattern="^(confirmed|dismissed|open)$")
     note: str = Field("", max_length=1000)
