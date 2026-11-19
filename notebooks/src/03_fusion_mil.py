@@ -25,7 +25,8 @@
 # Thời gian: không có OEP ~15 phút (GPU T4); có OEP thêm ~30–60 phút trích đặc trưng.
 
 # %%
-!pip -q install mediapipe silero-vad onnx onnxruntime kaggle opencv-python-headless pyarrow
+!pip -q install -U kaggle  # bản mới mới đọc được API token dạng KGAT_...
+!pip -q install mediapipe silero-vad onnx onnxruntime opencv-python-headless pyarrow
 
 # %%
 import json
@@ -62,15 +63,18 @@ print("Thiết bị:", DEV, "| đầu vào mô hình:", DIM, "chiều")
 
 # %% [markdown]
 # ## 1. OEP: tải từ Kaggle một lần, lưu trên Google Drive
-# - **Lần đầu:** tải `kaggle.json` (Kaggle → Settings → API → Create New Token) lên khi được hỏi. Ô này tải bộ OEP (~12 GB nén),
-#   chỉ giữ phần cần dùng (video webcam `*1.avi`, âm thanh `*.wav`, nhãn `gt.txt`, ~4 GB) và chép vào
-#   `MyDrive/examguard_data/oep/`. `kaggle.json` cũng được lưu vào `MyDrive/examguard_data/` để lần sau khỏi tải lên lại.
+# - **Lần đầu:** cần khóa Kaggle. Cách dễ nhất: Kaggle → ảnh đại diện → Settings → API → **Generate New Token**, bấm nút
+#   sao chép mã `KGAT_...`, rồi dán vào ô nhập hiện ra khi chạy ô dưới (ô nhập ẩn ký tự) và Enter.
+#   Cách khác: thêm secret tên `KAGGLE_API_TOKEN` ở biểu tượng 🔑 bên trái Colab (bật "Notebook access"), hoặc để trống
+#   ô nhập rồi Enter để tải file `kaggle.json` kiểu cũ.
+#   Ô này tải bộ OEP (~12 GB nén), chỉ giữ phần cần dùng (video webcam `*1.avi`, âm thanh `*.wav`, nhãn `gt.txt`, ~4 GB)
+#   và chép vào `MyDrive/examguard_data/oep/`. Khóa Kaggle được lưu vào `MyDrive/examguard_data/` để lần sau khỏi nhập lại.
 # - **Các lần sau:** chép từ Drive về ổ máy Colab (nhanh hơn tải lại), không cần Kaggle nữa.
 # - Cần ~5 GB trống trên Drive. Video đeo kính (`*2.avi`, ~8 GB) không dùng nên không lưu; đặt `KEEP_WEARCAM = True` nếu cần.
 # - Đặc trưng đã trích được lưu ở `MyDrive/examguard/oep_features.npz`; khi file này có rồi thì không cần video nữa.
 #   Xóa file đó nếu muốn trích lại (ví dụ sau khi huấn luyện lại YOLO ở notebook 02).
 #
-# Không có `kaggle.json` thì đặt `USE_OEP = False` (vẫn huấn luyện được trên phiên tổng hợp, nhưng kết quả **không** đủ cho bài báo).
+# Không có khóa Kaggle thì đặt `USE_OEP = False` (vẫn huấn luyện được trên phiên tổng hợp, nhưng kết quả **không** đủ cho bài báo).
 
 # %%
 import shutil
@@ -92,25 +96,47 @@ def _keep(name: str) -> bool:
 
 
 def _kaggle_ready() -> bool:
-    kj = Path.home() / ".kaggle" / "kaggle.json"
-    kj.parent.mkdir(exist_ok=True)
-    saved = DRIVE_DATA / "kaggle.json"
-    if not kj.exists() and saved.exists():
-        shutil.copy(saved, kj)
-    if not kj.exists():
+    """Tìm khóa Kaggle: biến môi trường / Colab Secrets / file trong ~/.kaggle / bản lưu trên Drive / hỏi người dùng."""
+    home = Path.home() / ".kaggle"
+    home.mkdir(exist_ok=True)
+    tok_file, kj = home / "access_token", home / "kaggle.json"
+    saved_tok, saved_kj = DRIVE_DATA / "access_token", DRIVE_DATA / "kaggle.json"
+    token = os.environ.get("KAGGLE_API_TOKEN", "").strip()
+    if not token:
         try:
-            from google.colab import files
-            print("Chọn file kaggle.json")
-            up = files.upload()
-            kj.write_bytes(up["kaggle.json"])
-        except Exception as e:
-            print("Không có kaggle.json:", e)
-            return False
-    kj.chmod(0o600)
-    if DRIVE_OK and not saved.exists():
+            from google.colab import userdata
+            token = (userdata.get("KAGGLE_API_TOKEN") or "").strip()
+        except Exception:
+            pass
+    for src, dst in ((saved_tok, tok_file), (saved_kj, kj)):
+        if not dst.exists() and src.exists():
+            shutil.copy(src, dst)
+    if not token and tok_file.exists():
+        token = tok_file.read_text().strip()
+    if not token and not kj.exists():
+        from getpass import getpass
+        token = getpass("Dán API token Kaggle (KGAT_...) rồi Enter; để trống để tải file kaggle.json: ").strip()
+        if not token:
+            try:
+                from google.colab import files
+                print("Chọn file kaggle.json")
+                up = files.upload()
+                kj.write_bytes(up["kaggle.json"])
+            except Exception as e:
+                print("Không có khóa Kaggle:", e)
+                return False
+    if token:
+        os.environ["KAGGLE_API_TOKEN"] = token
+        tok_file.write_text(token)
+        tok_file.chmod(0o600)
+    if kj.exists():
+        kj.chmod(0o600)
+    if DRIVE_OK:
         DRIVE_DATA.mkdir(parents=True, exist_ok=True)
-        shutil.copy(kj, saved)
-        print("Đã lưu kaggle.json vào", saved)
+        for src, dst in ((tok_file, saved_tok), (kj, saved_kj)):
+            if src.exists() and not dst.exists():
+                shutil.copy(src, dst)
+                print("Đã lưu khóa Kaggle vào", dst)
     return True
 
 
@@ -145,7 +171,11 @@ if USE_OEP and not any(OEP_DIR.rglob("gt.txt")):
             else:
                 print("Không có Drive: dữ liệu chỉ nằm trên máy Colab, sẽ mất khi ngắt phiên.")
         else:
-            print("Tải thất bại. Kiểm tra lại kaggle.json (token có thể đã hết hạn: tạo token mới trên Kaggle).")
+            print("Tải thất bại. Khóa Kaggle sai hoặc hết hạn: tạo token mới trên Kaggle rồi chạy lại ô này để nhập lại.")
+            for f in (Path.home() / ".kaggle" / "access_token", Path.home() / ".kaggle" / "kaggle.json",
+                      DRIVE_DATA / "access_token", DRIVE_DATA / "kaggle.json"):
+                f.unlink(missing_ok=True)
+            os.environ.pop("KAGGLE_API_TOKEN", None)
 subjects = sorted({p.parent for p in OEP_DIR.rglob("gt.txt")}) if USE_OEP else []
 USE_OEP = USE_OEP and len(subjects) > 0
 print("OEP:", len(subjects), "người", "(TẮT — chỉ dùng dữ liệu tổng hợp)" if not USE_OEP else "")
