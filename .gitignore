@@ -13,3 +13,6 @@ frontend/public/models/
 notebooks/.ipynb_checkpoints/
 .DS_Store
 .claude/
+
+# Tài khoản thử trên máy (app.set_test_passwords)
+TAI_KHOAN_TEST.txt
