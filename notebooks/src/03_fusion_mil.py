@@ -61,30 +61,91 @@ FI = {n: i for i, n in enumerate(FEATURES)}
 print("Thiết bị:", DEV, "| đầu vào mô hình:", DIM, "chiều")
 
 # %% [markdown]
-# ## 1. OEP: tải từ Kaggle
-# Tải `kaggle.json` (Kaggle → Settings → API → Create New Token) lên Colab khi được hỏi. Không có thì đặt `USE_OEP = False`
-# (vẫn huấn luyện được trên phiên tổng hợp, nhưng kết quả **không** đủ cho bài báo).
+# ## 1. OEP: tải từ Kaggle một lần, lưu trên Google Drive
+# - **Lần đầu:** tải `kaggle.json` (Kaggle → Settings → API → Create New Token) lên khi được hỏi. Ô này tải bộ OEP (~12 GB nén),
+#   chỉ giữ phần cần dùng (video webcam `*1.avi`, âm thanh `*.wav`, nhãn `gt.txt`, ~4 GB) và chép vào
+#   `MyDrive/examguard_data/oep/`. `kaggle.json` cũng được lưu vào `MyDrive/examguard_data/` để lần sau khỏi tải lên lại.
+# - **Các lần sau:** chép từ Drive về ổ máy Colab (nhanh hơn tải lại), không cần Kaggle nữa.
+# - Cần ~5 GB trống trên Drive. Video đeo kính (`*2.avi`, ~8 GB) không dùng nên không lưu; đặt `KEEP_WEARCAM = True` nếu cần.
+# - Đặc trưng đã trích được lưu ở `MyDrive/examguard/oep_features.npz`; khi file này có rồi thì không cần video nữa.
+#   Xóa file đó nếu muốn trích lại (ví dụ sau khi huấn luyện lại YOLO ở notebook 02).
+#
+# Không có `kaggle.json` thì đặt `USE_OEP = False` (vẫn huấn luyện được trên phiên tổng hợp, nhưng kết quả **không** đủ cho bài báo).
 
 # %%
+import shutil
+import zipfile
+
 USE_OEP = True
+KEEP_WEARCAM = False
+DRIVE_DATA = OUT.parent / "examguard_data"  # MyDrive/examguard_data khi đã mount Drive
+DRIVE_OEP = DRIVE_DATA / "oep"
+DRIVE_OK = str(OUT).startswith("/content/drive")
 OEP_DIR = DATA / "oep"
-if USE_OEP and not any(OEP_DIR.rglob("gt.txt")):
+
+
+def _keep(name: str) -> bool:
+    base = name.rsplit("/", 1)[-1].lower()
+    if base in ("gt.txt", "read_me.txt") or base.endswith(".wav") or base.endswith("1.avi"):
+        return True
+    return KEEP_WEARCAM and base.endswith(".avi")
+
+
+def _kaggle_ready() -> bool:
     kj = Path.home() / ".kaggle" / "kaggle.json"
+    kj.parent.mkdir(exist_ok=True)
+    saved = DRIVE_DATA / "kaggle.json"
+    if not kj.exists() and saved.exists():
+        shutil.copy(saved, kj)
     if not kj.exists():
         try:
             from google.colab import files
             print("Chọn file kaggle.json")
             up = files.upload()
-            kj.parent.mkdir(exist_ok=True)
             kj.write_bytes(up["kaggle.json"])
-            kj.chmod(0o600)
         except Exception as e:
             print("Không có kaggle.json:", e)
-    if kj.exists():
-        os.system(f"kaggle datasets download -d raajanwankhade/oep-dataset -p {DATA} --unzip -q")
-        for cand in DATA.rglob("gt.txt"):
-            OEP_DIR = cand.parent.parent
-            break
+            return False
+    kj.chmod(0o600)
+    if DRIVE_OK and not saved.exists():
+        DRIVE_DATA.mkdir(parents=True, exist_ok=True)
+        shutil.copy(kj, saved)
+        print("Đã lưu kaggle.json vào", saved)
+    return True
+
+
+def _drive_has_oep() -> bool:
+    return (DRIVE_OEP / "_done").exists()
+
+
+if USE_OEP and not any(OEP_DIR.rglob("gt.txt")):
+    if DRIVE_OK and _drive_has_oep():
+        print("Chép OEP từ Drive về máy Colab...")
+        shutil.copytree(DRIVE_OEP, OEP_DIR, dirs_exist_ok=True)
+    elif _kaggle_ready():
+        zpath = DATA / "oep-dataset.zip"
+        if not zpath.exists():
+            print("Tải OEP từ Kaggle (~12 GB, khoảng 5–15 phút)...")
+            os.system(f"kaggle datasets download -d raajanwankhade/oep-dataset -p {DATA} -q")
+        if zpath.exists():
+            with zipfile.ZipFile(zpath) as z:
+                members = [m for m in z.namelist() if not m.endswith("/") and _keep(m)]
+                print("Giải nén", len(members), "file cần dùng...")
+                for m in members:
+                    rel = Path(*Path(m).parts[1:]) if len(Path(m).parts) > 1 else Path(m)  # bỏ thư mục "OEP database/"
+                    dst = OEP_DIR / rel
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(m) as src, open(dst, "wb") as f:
+                        shutil.copyfileobj(src, f, 1 << 24)
+            zpath.unlink()  # giải phóng ổ Colab
+            if DRIVE_OK:
+                print("Chép vào Drive:", DRIVE_OEP, "(vài phút)...")
+                shutil.copytree(OEP_DIR, DRIVE_OEP, dirs_exist_ok=True)
+                (DRIVE_OEP / "_done").write_text("ok")
+            else:
+                print("Không có Drive: dữ liệu chỉ nằm trên máy Colab, sẽ mất khi ngắt phiên.")
+        else:
+            print("Tải thất bại. Kiểm tra lại kaggle.json (token có thể đã hết hạn: tạo token mới trên Kaggle).")
 subjects = sorted({p.parent for p in OEP_DIR.rglob("gt.txt")}) if USE_OEP else []
 USE_OEP = USE_OEP and len(subjects) > 0
 print("OEP:", len(subjects), "người", "(TẮT — chỉ dùng dữ liệu tổng hợp)" if not USE_OEP else "")
@@ -198,10 +259,11 @@ def pixelate(img, dets, W, H):
 
 
 def vad_frames(video: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Cờ có tiếng nói + RMS mỗi 100 ms."""
+    """Cờ có tiếng nói + RMS mỗi 100 ms. OEP ghi micro thành file .wav riêng; không có thì lấy âm thanh trong video."""
     from silero_vad import get_speech_timestamps, load_silero_vad
-    wav = DATA / (video.stem + ".wav")
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(video), "-ac", "1", "-ar", "16000", str(wav)], check=False)
+    src = next(iter(sorted(video.parent.glob("*.wav"))), video)
+    wav = DATA / (video.stem + "_16k.wav")
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(src), "-ac", "1", "-ar", "16000", str(wav)], check=False)
     if not wav.exists():
         return np.zeros(0, bool), np.zeros(0)
     import soundfile as sf
