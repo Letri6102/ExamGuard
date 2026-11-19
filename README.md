@@ -17,6 +17,9 @@ ExamGuard/
 
 Cần Python 3.10/3.11 và Node 20+.
 
+**Cách nhanh trên macOS:** nhấn đúp `ExamGuard.command` trong Finder. File này tự cài môi trường (lần đầu), build lại giao diện khi mã nguồn thay đổi, chạy server ở http://localhost:8100 và mở trình duyệt. Đóng cửa sổ Terminal để tắt.
+
+Hoặc làm từng bước:
 ```bash
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
