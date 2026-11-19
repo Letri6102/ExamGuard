@@ -4,7 +4,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -58,7 +58,8 @@ def candidate_login(body: CandidateLoginIn, request: Request, db: Session = Depe
     row = db.execute(
         select(Registration, Exam, Candidate)
         .join(Exam, Exam.id == Registration.exam_id).join(Candidate, Candidate.id == Registration.candidate_id)
-        .where(Exam.code == body.exam_code.strip(), Candidate.code == body.candidate_code.strip())
+        .where(func.upper(Exam.code) == body.exam_code.strip().upper(),
+               func.upper(Candidate.code) == body.candidate_code.strip().upper())
     ).first()
     if not row or not secrets.compare_digest(row[0].access_code, body.access_code.strip().upper()):
         raise HTTPException(401, "Sai mã kỳ thi, số báo danh hoặc mã dự thi.")

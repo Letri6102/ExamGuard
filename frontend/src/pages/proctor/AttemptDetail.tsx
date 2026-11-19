@@ -9,7 +9,7 @@ const MOD_VI: Record<string, string> = { face: "Khuôn mặt", identity: "Danh t
   browser: "Trình duyệt", keystroke: "Nhịp gõ", answer: "Bài làm", system: "Hệ thống" };
 const EV_VI: Record<string, string> = { tab_hidden: "Rời tab", tab_visible: "Quay lại tab", window_blur: "Mất focus cửa sổ",
   window_focus: "Quay lại cửa sổ", fullscreen_exit: "Thoát toàn màn hình", fullscreen_enter: "Vào lại toàn màn hình",
-  paste_blocked: "Chặn dán", copy_blocked: "Chặn sao chép", drop_blocked: "Chặn kéo thả", screen_change: "Đổi cấu hình màn hình",
+  paste_blocked: "Chặn dán", copy_blocked: "Chặn sao chép", screenshot: "Chụp màn hình", drop_blocked: "Chặn kéo thả", screen_change: "Đổi cấu hình màn hình",
   burst: "Chụp chùm khung", q_view: "Xem câu", warning: "Đã cảnh báo thí sinh", warning_ack: "Thí sinh bấm \"Tôi đã hiểu\"",
   proctor_warning: "Giám thị gửi cảnh báo" };
 
@@ -18,6 +18,11 @@ function eventDetail(kind: string, d: any): string {
     const w = WARNINGS[d?.code as WarningCode];
     const title = w ? w.title : d?.code;
     return kind === "warning" ? `${title}${d?.text ? `: "${d.text}"` : ""} (lần ${d?.n ?? "?"}, ${d?.mode === "modal" ? "hộp thoại" : "thông báo"})` : title;
+  }
+  if (kind === "screenshot") {
+    const how: Record<string, string> = { printscreen: "phím PrintScreen", shortcut: `phím tắt ${d?.key ?? ""}`.trim(),
+      modifier_combo: "Cmd/Win + Shift nhấn rồi thả (chụp toàn màn hình trên Mac)", region_overlay: "lớp chọn vùng chụp hiện lên" };
+    return how[d?.method] || "";
   }
   if (kind === "proctor_warning") return `"${d?.text}" · ${d?.by} · ${d?.delivered ? "đã tới màn hình thí sinh" : "thí sinh không kết nối"}`;
   return JSON.stringify(d) === "{}" ? "" : JSON.stringify(d);

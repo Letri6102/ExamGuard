@@ -3,10 +3,12 @@
  *  - Không khóa bài: mọi hành vi chỉ được GHI NHẬN thành đặc trưng/sự kiện, giám thị quyết định.
  *  - Bộ gõ tiếng Việt: KHÔNG chặn ở keydown; phím ảo của IME (isComposing / keyCode 229) bị loại khỏi nhịp gõ.
  *  - Chặn dán / kéo thả / menu chuột phải / sao chép đề.
+ *  - Phát hiện phím tắt chụp màn hình (screenshot.ts); tính vào copy_attempts vì cũng là sao chép đề.
  */
 import {
   keyTimings, keystrokeWindow, median, PRIVATE_KEYSTROKE_FEATURES, privatize, type KeyBaseline, type KeyEvent,
 } from "./features";
+import { ScreenshotDetector, type ScreenshotHit } from "./screenshot";
 
 export type GuardEvent = { t: number; k: string; d?: Record<string, unknown> };
 
@@ -30,6 +32,7 @@ export class BrowserGuard {
   private chars = 0;
   private hiddenSince = 0;
   private blurSince = 0;
+  private blurSinceAt = 0;
   private notFsSince = 0;
   private fullscreenWanted = false;
   private returnAt = -1e9;
@@ -37,6 +40,7 @@ export class BrowserGuard {
   private warmFlight: number[] = [];
   private baseline: KeyBaseline | null = null;
   private lastWindowAt = 0;
+  private shots = new ScreenshotDetector();
   extendedScreen: boolean | null = null;
 
   constructor(o: Opts) {
@@ -82,6 +86,7 @@ export class BrowserGuard {
       }
     });
     this.on(window, "blur", () => {
+      this.shot(this.shots.blur(performance.now()));
       if (!document.hidden) {
         this.blurSince = performance.now();
         this.ev("window_blur");
@@ -89,12 +94,15 @@ export class BrowserGuard {
     });
     this.on(window, "focus", () => {
       if (this.blurSince) {
+        this.blurSinceAt = this.blurSince;
         const dur = (performance.now() - this.blurSince) / 1000;
         this.c.blur += dur;
         this.blurSince = 0;
         if (dur >= 1) {
           this.c.switches++;
-          this.ev("window_focus", { seconds: Math.round(dur) });
+          // mất focus do lớp chọn vùng của phím chụp màn hình: đã cảnh báo chụp màn hình, không báo thêm "mất tập trung"
+          const shot = this.shots.lastHitAt() >= this.blurSinceAt - 2000;
+          this.ev("window_focus", shot ? { seconds: Math.round(dur), screenshot: true } : { seconds: Math.round(dur) });
           this.markReturn();
         }
       }
@@ -144,15 +152,24 @@ export class BrowserGuard {
       const ime = e.isComposing || e.keyCode === 229 || e.key === "Process";
       if ((e.ctrlKey || e.metaKey) && ["p", "s", "u"].includes(e.key.toLowerCase())) e.preventDefault();
       this.keys.push({ t: performance.now(), type: "down", code: e.code || e.key, ime });
+      if (!ime) this.shot(this.shots.keydown(e, performance.now()));
     });
     this.on(document, "keyup", (e: KeyboardEvent) => {
       this.keys.push({ t: performance.now(), type: "up", code: e.code || e.key, ime: e.isComposing || e.keyCode === 229 });
+      this.shot(this.shots.keyup(e, performance.now()));
     });
     this.on(document, "compositionend", (e: CompositionEvent) => {
       this.compositions++;
       if (e.data) this.addChars(e.data.length);
     });
     this.lastWindowAt = performance.now();
+  }
+
+  private shot(hits: ScreenshotHit[]) {
+    for (const h of hits) {
+      this.c.copy++;
+      this.ev("screenshot", h.key ? { method: h.method, key: h.key } : { method: h.method });
+    }
   }
 
   private addChars(n: number) {

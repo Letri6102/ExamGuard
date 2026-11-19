@@ -16,6 +16,7 @@ export const WARNINGS = {
   FULLSCREEN_EXIT: { title: "Bạn đã thoát chế độ toàn màn hình", text: "Hãy quay lại toàn màn hình để tiếp tục làm bài.", severity: "warn" },
   PASTE: { title: "Không được dán nội dung", text: "Bài thi không cho phép dán hoặc kéo thả nội dung từ nơi khác.", severity: "bad" },
   COPY: { title: "Không được sao chép đề thi", text: "Sao chép nội dung đề thi là không được phép.", severity: "warn" },
+  SCREENSHOT: { title: "Phát hiện thao tác chụp màn hình", text: "Chụp hoặc ghi lại màn hình đề thi là không được phép.", severity: "bad" },
   EXTENDED_SCREEN: { title: "Phát hiện màn hình phụ", text: "Hãy tháo màn hình phụ khỏi máy trong giờ thi.", severity: "bad" },
   NO_FACE: { title: "Không thấy khuôn mặt của bạn", text: "Hãy ngồi ngay ngắn trước camera, đủ ánh sáng và không che camera.", severity: "warn" },
   MULTI_FACE: { title: "Có người khác trong khung hình", text: "Trong giờ thi chỉ thí sinh được có mặt trước camera.", severity: "bad" },
@@ -137,11 +138,12 @@ export class WarningDetector {
 export function warningForGuardEvent(kind: string, detail?: Record<string, unknown>): WarningCode | null {
   switch (kind) {
     case "tab_visible": return "TAB_AWAY";
-    case "window_focus": return "WINDOW_BLUR";
+    case "window_focus": return detail && detail.screenshot ? null : "WINDOW_BLUR";
     case "fullscreen_exit": return "FULLSCREEN_EXIT";
     case "paste_blocked":
     case "drop_blocked": return "PASTE";
     case "copy_blocked": return "COPY";
+    case "screenshot": return "SCREENSHOT";
     case "screen_change": return detail && detail.extended ? "EXTENDED_SCREEN" : null;
     default: return null;
   }
